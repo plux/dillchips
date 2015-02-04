@@ -56,7 +56,7 @@ loop(#state{sock = Sock, config = Config} = State) ->
 	    connect(Config);
 	{tcp, Sock, Data} ->
 	    log("recv: ~p", [Data]),
-	    respond(State, string:tokens(Data, ": "));
+	    handle_packet(State, string:tokens(Data, ": "));
 	reload ->
 	    ok;
         {join, Channel} ->
@@ -71,23 +71,21 @@ loop(#state{sock = Sock, config = Config} = State) ->
     ?MODULE:loop(State).
 
 %% Ping
-respond(State, ["PING"|Rest]) ->
+handle_packet(State, ["PING"|Rest]) ->
     send(State, "PONG " ++ Rest);
 %% Privmsg
-respond(State, [Who, "PRIVMSG", Chan | Rest]) ->
-    Msg = string:join(Rest, " "),
-    case Msg of
+handle_packet(State, [Who, "PRIVMSG", Channel | Rest]) ->
+    case string:join(Rest, " ") of
 	"hej" ++ _ ->
-	    Answer = io_lib:format("hej ~s!", [nick(Who)]),
-	    msg(State, Chan, Answer);
-	_ ->
+	    msg(State, Channel, ["hej ", nick(Who), "!"]);
+	Msg ->
 	    log("message is: " ++ Msg)
     end;
 %% End of MOTD
-respond(State, [_, "376"|_]) ->
+handle_packet(State, [_, "376"|_]) ->
     join_channels(State);
 %% Rest
-respond(_State, Tokens) ->
+handle_packet(_State, Tokens) ->
     log("Tokens: ~p", [Tokens]).
 
 nick(Who) ->
@@ -98,7 +96,7 @@ msg(State, To, Message) ->
     send(State, ["PRIVMSG ", To, " :", Message]).
 
 send(State, Msg) ->
-    log("send: ~p\n", [Msg]),
+    log("send: ~p", [Msg]),
     gen_tcp:send(sock(State),  [Msg, "\r\n"]).
 
 sock(#state{sock = Sock}) ->
